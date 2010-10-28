@@ -1,0 +1,76 @@
+10	CONTINUE
+
+		! Compute the rates and the waiting time tau
+		CALL compute_rates(x, Phi_present, y, coll_rate, out_rate, xmin, tau)
+
+		! Wait time tau
+		t=t+tau
+
+	! recalculate future field particles mass	
+	Phi_future=Phi_future+Q_in*tau
+
+	IF (rnd240(n0,n1,n2)<eps2*Q_in*tau/Phi_present) THEN
+		! Particle replacement
+		CALL replacement(x1, y)
+
+	ENDIF
+	
+			
+	IF (rnd240(n0,n1,n2)<coll_rate/(coll_rate+out_rate)) THEN
+		! A collision occurs
+		!CALL collision
+		f_coll_part_denom=c1*Phi_present*(y**a)*(xmin**(a-1.0))
+1		CONTINUE
+		j=1.0+Np*rnd240(n0,n1,n2)
+		f_coll_part_numer=c1*Phi_present*(y**a)*(x(j)**(a-1.0))
+		IF (rnd240(n0,n1,n2)>f_coll_part_numer/f_coll_part_denom) GOTO 1
+		
+		y=y+x(j)
+		n=n+1
+		GOTO 10
+	ENDIF
+
+
+
+
+
+
+
+
+
+
+
+
+
+	DO
+		IF(.NOT. collision_occurred) EXIT
+		! Compute the rates and the waiting time tau
+		CALL compute_rates(x, Phi_present, y, coll_rate, out_rate, xmin, tau)
+
+		! Wait time tau
+		t=t+tau
+
+		! recalculate future field particles mass	
+		Phi_future=Phi_future+Q_in*tau
+
+		IF (rnd240(n0,n1,n2)<eps2*Q_in*tau/Phi_present) THEN
+			! Particle replacement
+			CALL replacement(x1, y)
+
+		ENDIF
+	
+		collision_occurred=.FALSE.	
+		IF (rnd240(n0,n1,n2)<coll_rate/(coll_rate+out_rate)) THEN
+			! A collision occurs
+			!CALL collision
+			f_coll_part_denom=c1*Phi_present*(y**a)*(xmin**(a-1.0))
+1			CONTINUE
+			j=1.0+Np*rnd240(n0,n1,n2)
+			f_coll_part_numer=c1*Phi_present*(y**a)*(x(j)**(a-1.0))
+			IF (rnd240(n0,n1,n2)>f_coll_part_numer/f_coll_part_denom) GOTO 1
+		
+			y=y+x(j)
+			n=n+1
+			collision_occurred=.TRUE.
+		ENDIF
+	ENDDO
