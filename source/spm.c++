@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
 
   double lambda,lambda0;
   int alpha;
-  double t, tStop=12e0; // Current time and stopping time (default 12 seconds)
+  //double t, tStop=12e0; // Current time and stopping time (default 12 seconds)
   double tau; // Waiting time
 
   double* rate = new double[6];  //
@@ -51,8 +51,18 @@ int main(int argc, char *argv[])
   string kernelName;
   double* moments = new double[noMoments];
 
+  double fieldMassDensCurrent,fieldMassDensFuture;
+
+  int iter=0;
+  int iterMax=1000;
+
+  double Qin=1e0;
+  double repProb;
+  
   bool coagOn=true;
 
+  bool testParticleActive=true;
+    
   // Set up output file streams
   ofstream outputFile;
   ofstream momentsFile;
@@ -87,7 +97,7 @@ int main(int argc, char *argv[])
   
   // Output blurb
   cout << endl;
-  cout << "Stochastic PBE Solver - A. J. Smith (ajs224@cam.ac.uk)" << endl;
+  cout << "SPM Stochastic PBE Solver - A. J. Smith (ajs224@cam.ac.uk)" << endl;
   cout << endl;
   cout << "This code solves the continuous Smoluchowski equation with in/outflow" << endl;
   cout << "and coagulation described by constant, additive and multiplicative kernels " << endl;
@@ -253,142 +263,144 @@ int main(int argc, char *argv[])
         kernelName="constant";
       }
 
-	t=0e0;
-
-    lambda0=1e0/N;
-
-    alpha=0;
-
-  
-  //xDiam = new double[N];  // Allocate N ints and save ptr in pxDiam.
-  Particle * mfaParticle = new Particle[N];
-
-  //vector<double> xDiam (N);
-  
-  // Initialise PSD to a delta delta(x-1), i.e., mono-dispersed (equivalent to setting m(x,0)=delta(x-1))
-  for (int i=0; i<N; i++)
-    {  
-      //xDiam[i] = 1e0;
-      mfaParticle[i].setIndex(i);
-      mfaParticle[i].setMass(1e0);
-    }
-  
-
-  
-  out << N;
-  desc=out.str()+"_";
-  
-  outputFileName+=desc+kernelName+ext;
-  momentsFileName+=desc+kernelName+ext;
-  diamsFileName+=desc+kernelName+ext;
+    Particle testParticle;
+    Particle * fieldParticleCurrent = new Particle[N];
+    Particle * fieldParticleFuture = new Particle[N];
     
-  outputFile.open(outputFileName.c_str(), ios::out);
-  momentsFile.open(momentsFileName.c_str(), ios::out);
-  diamsFile.open(diamsFileName.c_str(), ios::out);
-  
-  //cout << "N= " << N <<endl;
-  //cout << "tStop= " << tStop << "s." << endl;
-  cout << "Running stochastic simulation with " << N << " stochastic particles for " << tStop << " seconds." << endl;
-  kernelName[0]=toupper(kernelName[0]); // capitalise
-  cout << kernelName << " kernel selected." << endl;
-  cout << "Inflow rate (1/alpha):" << 1e0/inFactor << endl;
-  cout << "Outflow rate (1/beta):" << 1e0/outFactor << endl;
+    // Initialise PSD to a delta delta(x-1), i.e., mono-dispersed (equivalent to setting m(x,0)=delta(x-1))
+    for (int i=0; i<N; i++)
+      {  
+	fieldParticleCurrent[i].setMass(1e0);
+	fieldParticleFuture[i].setMass(1e0);
+      }
 
-  cout.precision(10);
-  cout.width(20);
+    // Initialise Phi_p
+    fieldMassDensCurrent=1e0;
+   
+    out << N;
+    desc=out.str()+"_";
+    
+    outputFileName+=desc+kernelName+ext;
+    momentsFileName+=desc+kernelName+ext;
+    diamsFileName+=desc+kernelName+ext;
+    
+    outputFile.open(outputFileName.c_str(), ios::out);
+    momentsFile.open(momentsFileName.c_str(), ios::out);
+    diamsFile.open(diamsFileName.c_str(), ios::out);
+    
+    //cout << "N= " << N <<endl;
+    //cout << "tStop= " << tStop << "s." << endl;
+    cout << "Running stochastic simulation with " << N << " stochastic particles for " << iterMax << " iterations." << endl;
+    kernelName[0]=toupper(kernelName[0]); // capitalise
+    cout << kernelName << " kernel selected." << endl;
+    cout << "Inflow rate (1/alpha):" << 1e0/inFactor << endl;
+    cout << "Outflow rate (1/beta):" << 1e0/outFactor << endl;
 
-  cout.setf(ios::scientific);
-  outputFile.precision(8);
-  momentsFile.precision(8);
-  diamsFile.precision(8);
+    cout.precision(10);
+    cout.width(20);
+    
+    cout.setf(ios::scientific);
+    outputFile.precision(8);
+    momentsFile.precision(8);
+    diamsFile.precision(8);
+    
+    // Output header
+    cout << "t\t\tm0\t\t\tm1\t\t\tm2\t\t\tm3" << endl;
+    
+    // Iterate whilst t less than the stopping time
+    while (iter<iterMax)
+      {
+	
+	fieldMassDensFuture=0e0;
 
-  // Output header
-  cout << "t\t\tm0\t\t\tm1\t\t\tm2\t\t\tm3" << endl;
+	testParticle.setMass(m_in());
 
-  // Iterate whilst t less than the stopping time
-  while (t<tStop)
-    {
-      
-      lambda=lambda0*pow(double( N )/(N-1), alpha);
-
-      //cout << lambda0 << " " << lambda << endl;
-      
-      M=lambda*N;
-
-      //cout << M << endl;
-      
-      //Compute rates (could shove this in a subroutine)
-      //Compute collision rate
-      collRate=0.0;
-      minProperty=1.0e8;
-
-      for (int i=0; i<N; i++)
-	{
-	  minProperty=min(minProperty, mfaParticle[i].getMass());
-	  
-	  for (int j=0; j<N; j++)
-	    {
-	      collRate+=k(mfaParticle[i].getMass(),mfaParticle[j].getMass())/mfaParticle[j].getMass();
-	    }
-	}
-
-      collRate*=lambda;
-      
-      if(!coagOn)
-    	  collRate=0e0; // Switch off coagulation for testing purposes
-
-      rate[0]=collRate;
-      
-      // Outflow rate
-      rate[1]=0e0;
-      for (int i=0; i<N; i++)
-	{
-	  rate[1]+=1e0/theta(mfaParticle[i].getMass(),outFactor);
-	}
-      
-      // Inflow rate
-      //rate[2]=N/2e0; // m_in~U[0,1] // this should always be the rate!
-      rate[2]=N/inFactor; // m_in~U[0,1] // this should always be the rate!
-      //rate[2]=1e0/2e0;  // m_in_delta_{i1}
-
-      // Total rate
-      rateTotal=rate[0]+rate[1]+rate[2];
-      
-      // Compute exponentially distributed waiting time
-      tau=-log(mtrand())/(rateTotal);
-
-      //cout << mtrand() << endl;
-      //cout << rate[0] << " " << rate[1] << " " << rate[2] << endl;
-      //cout << "t= " << t << endl;
-
-      // Implement binary tree, but for now, do it like a spastic
-      
-      if(mtrand()<rate[0]/rateTotal)
-	{
-	  // Coagulation occurs
-	  // Choose a collision pair
-  
-	  firstChosen=false;
-	  secondChosen=false;
-
-	  while(firstChosen==false)
-	    {
-	      while(secondChosen==false)
-		{
-		  firstParticle=mtrand.randInt( N ) ;
-	      	  secondParticle=mtrand.randInt( N );
-		  
-	      	  //collProb=k(xDiam[firstParticle],xDiam[secondParticle])/(rateTotal*xDiam[secondParticle]);
-	      	collProb=k(mfaParticle[firstParticle].getMass(),mfaParticle[secondParticle].getMass())/(rateTotal*mfaParticle[secondParticle].getMass());
-		  if( (mtrand()< collProb) && (firstParticle!=secondParticle))
-		    {
-		      firstChosen=true;
-		      secondChosen=true; 
-		    }
-		}
+	cout << "Test particle Mass=" << testParticle.getMass() << endl;
+	
+	while(testParticleActive)
+	  {
+	    	
+	    //Compute rates (could shove this in a subroutine)
+	    //Compute collision rate
+	    collRate=0.0;
+	    minProperty=1.0e8;
+	    
+	    for (int i=0; i<N; i++)
+	      {
+		minProperty=min(minProperty, fieldParticleCurrent[i].getMass());
+		
+		for (int j=0; j<N; j++)
+		  {
+		    collRate+=k(fieldParticleCurrent[i].getMass(),fieldParticleCurrent[j].getMass())/fieldParticleCurrent[j].getMass();
+		  }
+	      }
+	    
+	    collRate*=fieldMassDensCurrent/N;
+	    
+	    if(!coagOn)
+	      collRate=0e0; // Switch off coagulation for testing purposes
+	    
+	    rate[0]=collRate;
+	    
+	    // Outflow rate
+	    rate[1]=0e0;
+	    for (int i=0; i<N; i++)
+	      {
+		rate[1]+=1e0/theta(testParticle.getMass(),outFactor);
+	      }
+	    
+	    // Inflow rate
+	    //rate[2]=N/2e0; // m_in~U[0,1] // this should always be the rate!
+	    //rate[2]=N/inFactor; // m_in~U[0,1] // this should always be the rate!
+	    //rate[2]=1e0/2e0;  // m_in_delta_{i1}
+	    
+	    // Total rate
+	    //rateTotal=rate[0]+rate[1]+rate[2];
+	    rateTotal=rate[0]+rate[1];
+	    
+	    // Compute exponentially distributed waiting time
+	    tau=-log(mtrand())/(rateTotal);
+	    
+	    fieldMassDensFuture=fieldMassDensFuture+tau*Qin;
+	    
+	    repProb=eps2*Qin*tau/fieldMassDensCurrent;
+	    
+	    // with prob repProb replace a uniformly chosen field particle with a test particle
+	    if(mtrand()<repProb)
+	      {
+		firstParticle=mtrand.randInt( N ) ;
+		fieldParticleFuture[firstParticle].setMass(testParticle);
+	      }
+	    
+	    // Implement binary tree, but for now, do it like a spastic
+	    if(mtrand()<rate[0]/rateTotal)
+	      {
+		// Coagulation occurs
+		// Choose a collision pair
+		
+		firstChosen=false;
+		secondChosen=false;
+	    
+		while(firstChosen==false)
+		  {
+		    while(secondChosen==false)
+		      {
+			firstParticle=mtrand.randInt( N ) ;
+			secondParticle=mtrand.randInt( N );
+			
+			//collProb=k(xDiam[firstParticle],xDiam[secondParticle])/(rateTotal*xDiam[secondParticle]);
+			collProb=k(mfaParticle[firstParticle].getMass(),mfaParticle[secondParticle].getMass())/(rateTotal*mfaParticle[secondParticle].getMass());
+			if( (mtrand()< collProb) && (firstParticle!=secondParticle))
+			  {
+			    firstChosen=true;
+			    secondChosen=true; 
+			  }
+		      }
+		    
+		    
 	      
-	      
-	    }
+		  }
+		
 
 
 	  mfaParticle[firstParticle]+=mfaParticle[secondParticle]; // use overloaded += operator
@@ -403,149 +415,117 @@ int main(int argc, char *argv[])
 	         break;
 	  }
 */
-	  events[0]++;	  	  
+	  events[0]++;
+	  testParticleActive=true;
 	  
-	}
-      else if( mtrand() < (rate[1]/(rate[1]+rate[2])) )
-	{
+	      }
+	    
+	    else
+	      {
+		testParticleActive=false;
+	      }
+	  }
 
-	  // Particle leaves the system
-	  firstChosen=false;
-	  secondChosen=false;
-
-	  while(firstChosen==false)
-	    {
-	      
-	      firstParticle=mtrand.randInt( N );
-	      // should select according to outflow distribution
-	      firstChosen=true;
-	    }
-	  
-	  while(secondChosen==false)
-	    {
-	      secondParticle=mtrand.randInt( N );
-	      if(firstParticle!=secondParticle)
-		secondChosen=true;
-	    }
-	  
-	  // Replace particle i with a couple of particle j (that is, particle i leaves the system)
-	  //mfaParticle[firstParticle].getMass()=mfaParticle[secondParticle].getMass();
-	  mfaParticle[firstParticle]=mfaParticle[secondParticle]; // This ought to do a shall copy, copying all the member data
-	  alpha--;
+	// Test particle leaves the system
+	
 	  events[1]++;
 
 	  //cout << "Outflow occurs" << endl;
 	  
-	}
-      else
-	{
-
-	  // Particle inflow
-	  particleIndex=mtrand.randInt( N );
-	  //mfaParticle[particleIndex].setMass(mtrand()); // m_in~U[0,1]
-	  mfaParticle[particleIndex].setMass(mIn()); // m_in_delta_{i1}
-	  alpha++;
-	  events[2]++;
-
-	  //cout << "Inflow occurs" << endl;
+      
+	  eventsTotal=events[0]+events[1]+events[2];
 	  
-	}
-      
-      t+=tau;
-
-      eventsTotal=events[0]+events[1]+events[2];
-      
-      cout.precision(8);
-      outputFile.precision(8);
-      momentsFile.precision(8);
-
-
-
-      // Let's compute the moments of the distribution
-      for(moment=0;moment<noMoments;moment++)
-	{
-
-	  moments[moment]=0e0;
-      
-	  for(int i=0;i<N;i++)
+	  cout.precision(8);
+	  outputFile.precision(8);
+	  momentsFile.precision(8);
+	  
+	  
+	  
+	  // Let's compute the moments of the distribution
+	  for(moment=0;moment<noMoments;moment++)
 	    {
-	      moments[moment]+=pow(mfaParticle[i].getMass(),moment);
+	      
+	      moments[moment]=0e0;
+	      
+	      for(int i=0;i<N;i++)
+		{
+		  moments[moment]+=pow(mfaParticle[i].getMass(),moment);
+		}
+	      moments[moment]=moments[moment]/N;
 	    }
-	  moments[moment]=moments[moment]/N;
-	}
-
+	  
       
-      //cout << tau << "\t" << t << "\t" << M << "\t" << lambda << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << "\t" <<  firstParticle << "\t" << secondParticle << "\t" << moments[1] << endl;
-
-      cout << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3]<< endl;
-
-
-      outputFile << tau << "\t" << t << "\t" << M << "\t" << lambda << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << endl;
-
-
-  
-      momentsFile << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3] << "\t" << moments[4] << endl;
+	  //cout << tau << "\t" << t << "\t" << M << "\t" << lambda << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << "\t" <<  firstParticle << "\t" << secondParticle << "\t" << moments[1] << endl;
+	  
+	  cout << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3]<< endl;
+	  
+	  
+	  outputFile << tau << "\t" << t << "\t" << M << "\t" << lambda << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << endl;
+	  
+	  
+	  
+	  momentsFile << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3] << "\t" << moments[4] << endl;
+	  
+	  
+	  
       
+      }
 
-
-      
-    }
-
-  outputFile.close();
-  momentsFile.close();
-  
-  for(int i=0;i<N;i++)
-    {
-      diamsFile << mfaParticle[i].getMass() << endl;
-    }
-
-  diamsFile.close();
-  
-  //moments=computeMoments(xDiam,1);
-  
-  // Let's save the state of the random number generator
-  MTRand::uint32 randState[ MTRand::SAVE ];
-  
-  mtrand.save( randState );
-  
-  // A stream is convenient for saving to a file.
-  ofstream stateOut( "state.dat" );
-  if( stateOut )
-    {
-      stateOut << mtrand;
-      stateOut.close();
-    }
-  
-  // Load with:
-  //mtrand4.load( randState );
-  // or from the file with
-  // ifstream stateIn( "state.dat" );
-  // 	if( stateIn )
-  // 	{
-  // 		stateIn >> mtrand;
-  // 		stateIn.close();
-  // 	}
-  
-
-  cout << "Events summary (collisions, inflows, outflows):" << endl << endl;
-  cout << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << endl << endl;
-  cout << "Simulation complete!" << endl;
-  cout << "Ran stochastic simulation with " << N << " stochastic particles for " << tStop << " seconds." << endl;
-  cout << kernelName << " kernel selected." << endl;
-
-  // Clean up memory
-/* Leads to error.  Why?
-  delete [] mfaParticle;  // When done, free memory pointed to by .
-  mfaParticle = NULL;     // Clear pxDiam to prevent using invalid memory reference
-*/
-  delete [] rate;
-  rate = NULL;
-  delete [] events;
-  events = NULL;
-  delete [] moments;
-  moments = NULL; 
-
-  return 0;
-  
+    outputFile.close();
+    momentsFile.close();
+    
+    for(int i=0;i<N;i++)
+      {
+	diamsFile << mfaParticle[i].getMass() << endl;
+      }
+    
+    diamsFile.close();
+    
+    //moments=computeMoments(xDiam,1);
+    
+    // Let's save the state of the random number generator
+    MTRand::uint32 randState[ MTRand::SAVE ];
+    
+    mtrand.save( randState );
+    
+    // A stream is convenient for saving to a file.
+    ofstream stateOut( "state.dat" );
+    if( stateOut )
+      {
+	stateOut << mtrand;
+	stateOut.close();
+      }
+    
+    // Load with:
+    //mtrand4.load( randState );
+    // or from the file with
+    // ifstream stateIn( "state.dat" );
+    // 	if( stateIn )
+    // 	{
+    // 		stateIn >> mtrand;
+    // 		stateIn.close();
+    // 	}
+    
+    
+    cout << "Events summary (collisions, inflows, outflows):" << endl << endl;
+    cout << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << endl << endl;
+    cout << "Simulation complete!" << endl;
+    cout << "Ran stochastic simulation with " << N << " stochastic particles for " << tStop << " seconds." << endl;
+    cout << kernelName << " kernel selected." << endl;
+    
+    // Clean up memory
+    /* Leads to error.  Why?
+       delete [] mfaParticle;  // When done, free memory pointed to by .
+       mfaParticle = NULL;     // Clear pxDiam to prevent using invalid memory reference
+    */
+    delete [] rate;
+    rate = NULL;
+    delete [] events;
+    events = NULL;
+    delete [] moments;
+    moments = NULL; 
+    
+    return 0;
+    
 }
 

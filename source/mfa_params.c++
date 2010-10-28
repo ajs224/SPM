@@ -1,5 +1,14 @@
 #include "mfa_params.h"
 
+namespace spm
+{
+
+  double Qin=1e0;
+  const double eps1=1e0;
+  const double eps2=0.5e0;
+} //namespace spm
+
+
 namespace mfaAnalytic
 {
   //enum kernelTypes { constant, additive, multiplicative, continuum, freemolecular, kinetic, shearlinear, shearnonlinear, settling, inertiasettling, berry, condensation, spmtest};
