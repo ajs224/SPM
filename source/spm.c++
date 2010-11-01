@@ -13,18 +13,23 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
-#include "MersenneTwister.h"
+#include "random.h"
 #include "mfa_functions.h"
 #include "mfa_params.h"
 #include "Particle.h"
 
-using namespace std;
 
 int main(int argc, char *argv[])
 {
-
+  
+  using namespace std;
   using namespace mfaAnalytic;
+  using namespace ajsRandom;
+
+  bool loadRandState=false; // Generate a new set of seeds
+  bool saveRandState=true; // Write the state so we can rewread later
  
+  
   double M; // mass density
   double collProb;
   //double* xDiam = NULL;   // Pointer to double, initialize to nothing.
@@ -82,19 +87,6 @@ int main(int argc, char *argv[])
   stringstream out;
   //char * pEnd;
 
-  //Particle particle1, particle2(0,0e0,4e0);
-   
-  // Declare a Mersenne Twister random number generator
-  // We seed with an array of values rather than a single integer to access the full 2^19937-1 possible sequences.
-  
-  MTRand::uint32 seed[ MTRand::N ];
-  for( int n = 0; n < MTRand::N; ++n )
-    seed[n] = 23 * n;  // fill with anything
-  MTRand mtrand( seed );
-       
-  //MTRand mtrand;
-  // Use with: double m1 = mtrand();
-  
   // Output blurb
   cout << endl;
   cout << "SPM Stochastic PBE Solver - A. J. Smith (ajs224@cam.ac.uk)" << endl;
@@ -266,6 +258,14 @@ int main(int argc, char *argv[])
     Particle testParticle;
     Particle * fieldParticleCurrent = new Particle[N];
     Particle * fieldParticleFuture = new Particle[N];
+
+
+    // Declare a Mersenne Twister random number generator
+    MTRand mtrand;
+    mtrand=myRand(loadRandState);
+    
+ 
+
     
     // Initialise PSD to a delta delta(x-1), i.e., mono-dispersed (equivalent to setting m(x,0)=delta(x-1))
     for (int i=0; i<N; i++)
@@ -483,28 +483,15 @@ int main(int argc, char *argv[])
     
     //moments=computeMoments(xDiam,1);
     
+
+
     // Let's save the state of the random number generator
-    MTRand::uint32 randState[ MTRand::SAVE ];
-    
-    mtrand.save( randState );
-    
-    // A stream is convenient for saving to a file.
-    ofstream stateOut( "state.dat" );
-    if( stateOut )
+    if(saveRandState)
       {
-	stateOut << mtrand;
-	stateOut.close();
+	saveState(mtrand);
       }
     
-    // Load with:
-    //mtrand4.load( randState );
-    // or from the file with
-    // ifstream stateIn( "state.dat" );
-    // 	if( stateIn )
-    // 	{
-    // 		stateIn >> mtrand;
-    // 		stateIn.close();
-    // 	}
+    
     
     
     cout << "Events summary (collisions, inflows, outflows):" << endl << endl;

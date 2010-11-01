@@ -19,7 +19,7 @@ public:
   // Particle constructor
   Particle(unsigned int initIndex, double initDiam, double initMass);
   // Particle destructor
-  ~Particle();
+  //~Particle();
   // Copy constructor
   Particle(const Particle &);
 

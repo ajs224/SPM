@@ -60,11 +60,11 @@ Particle::Particle(unsigned int initIndex, double initDiam, double initMass)
 }
 
 // Particle destructor
-Particle::~Particle()
-{
-  // Does nothing as of yet
-	//std::cout<<"Deallocatinf!\n";
-}
+//Particle::~Particle()
+//{
+//  // Does nothing as of yet
+//	//std::cout<<"Deallocatinf!\n";
+//}
 // Particle copy constructor (currently just shallow copy)
 Particle::Particle(const Particle & rhs)
 {
