@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include <map>
 #include "random.h"
 #include "mfa_functions.h"
 #include "mfa_params.h"
@@ -23,51 +24,48 @@ int main(int argc, char *argv[])
 {
   
   using namespace std;
+  using namespace spm;
   using namespace mfaAnalytic;
   using namespace ajsRandom;
 
   bool loadRandState=false; // Generate a new set of seeds
   bool saveRandState=true; // Write the state so we can rewread later
- 
-  
-  double M; // mass density
+   
+  //double M; // mass density
   double collProb;
-  //double* xDiam = NULL;   // Pointer to double, initialize to nothing.
-  int N=1024;           // Number of particles
+  //double* xDiam = NULL; // Pointer to double, initialize to nothing.
+  unsigned long int N=1024; // Number of particles
 
-  double lambda,lambda0;
-  int alpha;
-  //double t, tStop=12e0; // Current time and stopping time (default 12 seconds)
-  double tau; // Waiting time
+  //double lambda,lambda0;
+  //int alpha;
+  double t, tau; // Current time and waiting time
 
-  double* rate = new double[6];  //
-  int* events = new int[6];  //
-  int eventsTotal;
+  double* rate = new double[6]; //
+  int* events = new int[6]; //
+  //int eventsTotal;
     
   double collRate, rateTotal;
   double minProperty;
 
   double inFactor=10e0,outFactor=inFactor;
   
-  bool firstChosen, secondChosen;
-  int firstParticle, secondParticle, particleIndex;
-
+  bool particleChosen;
+  unsigned long int particleIndex;
+  
   int moment;
   string kernelName;
   double* moments = new double[noMoments];
-
+  
   double fieldMassDensCurrent,fieldMassDensFuture;
-
-  int iter=0;
-  int iterMax=1000;
-
-  double Qin=1e0;
+  
+  unsigned long int iter=1;
+  //int iterMax=1000;
+  
+  //double Qin=1e0;
   double repProb;
   
-  bool coagOn=true;
-
   bool testParticleActive=true;
-    
+  
   // Set up output file streams
   ofstream outputFile;
   ofstream momentsFile;
@@ -85,8 +83,7 @@ int main(int argc, char *argv[])
   
   string desc;
   stringstream out;
-  //char * pEnd;
-
+ 
   // Output blurb
   cout << endl;
   cout << "SPM Stochastic PBE Solver - A. J. Smith (ajs224@cam.ac.uk)" << endl;
@@ -96,8 +93,7 @@ int main(int argc, char *argv[])
   cout << "(admitting analytic solutions) in addition to a range of more physically " << endl;
   cout << "realistic kernels (run with --help for additional information)." << endl;
   cout << endl;
-  
-  
+    
   // Process command line arguments
   for (int i=1; i<argc; ++i)
     {
@@ -106,7 +102,7 @@ int main(int argc, char *argv[])
 	  //cout << "This is the help message" << endl;
 	  cout << "Usage: "<< argv[0] << " <flags>" << endl << endl;
 	  cout << "where <flags> is one or more of:" << endl << endl;
-	  cout << "\t" << "-t" << "\t\t" << "stopping time (default 12.0s)" << endl;
+	  cout << "\t" << "-i" << "\t\t" << "maximum number of iterations (default 10^4)" << endl;
 	  cout << "\t" << "-n" << "\t\t" << "number of stochastic particles (default 1024)" << endl;
 	  cout << "\t" << "-in" << "\t\t" << "inflow factor (default 10.0, i.e., rate is 1/10)" << endl;
 	  cout << "\t" << "-out" << "\t\t" << "outflow factor (default = inflow)" << endl;
@@ -136,7 +132,7 @@ int main(int argc, char *argv[])
 	    cout << "\ttime "<< argv[0] << " -alpha 0.1 -k multiplicative -loops 64 -p 16" << endl;
 	    cout << "\ttime "<< argv[0] << " -alpha 0.05 -k freemolecular -loops 64 -p 16" << endl;
 	  */
-
+	  
 	  cout << endl;
 	  
 	  return 0;
@@ -153,11 +149,11 @@ int main(int argc, char *argv[])
 	  // If omitted inflow=outflow rate
 	  outFactor = atof(argv[++i]); // default 2
 	}
-      else if (strcmp(argv[i], "-t") == 0)
+      else if (strcmp(argv[i], "-i") == 0)
 	{
-	  // Read stopping time
+	  // Read iterMax
 	  //tStop = strtod(argv[++i], &pEnd); // default 12.0s
-	  tStop = atof(argv[++i]); // default 12.0s
+	  iterMax = atoi(argv[++i]); // default 12.0s
 	}
       else if (strcmp(argv[i], "-n") == 0)
 	{
@@ -255,28 +251,25 @@ int main(int argc, char *argv[])
         kernelName="constant";
       }
 
+    // Declare particle types used in the stochastic simulation
     Particle testParticle;
     Particle * fieldParticleCurrent = new Particle[N];
     Particle * fieldParticleFuture = new Particle[N];
-
-
+    
     // Declare a Mersenne Twister random number generator
     MTRand mtrand;
     mtrand=myRand(loadRandState);
     
- 
-
-    
     // Initialise PSD to a delta delta(x-1), i.e., mono-dispersed (equivalent to setting m(x,0)=delta(x-1))
-    for (int i=0; i<N; i++)
+    for (unsigned long int i=0; i<N; i++)
       {  
 	fieldParticleCurrent[i].setMass(1e0);
 	fieldParticleFuture[i].setMass(1e0);
       }
-
+    
     // Initialise Phi_p
     fieldMassDensCurrent=1e0;
-   
+    
     out << N;
     desc=out.str()+"_";
     
@@ -290,12 +283,12 @@ int main(int argc, char *argv[])
     
     //cout << "N= " << N <<endl;
     //cout << "tStop= " << tStop << "s." << endl;
-    cout << "Running stochastic simulation with " << N << " stochastic particles for " << iterMax << " iterations." << endl;
+    cout << "Running SPM stochastic simulation with " << N << " stochastic particles for " << iterMax << " iterations." << endl;
     kernelName[0]=toupper(kernelName[0]); // capitalise
     cout << kernelName << " kernel selected." << endl;
     cout << "Inflow rate (1/alpha):" << 1e0/inFactor << endl;
     cout << "Outflow rate (1/beta):" << 1e0/outFactor << endl;
-
+    
     cout.precision(10);
     cout.width(20);
     
@@ -310,12 +303,17 @@ int main(int argc, char *argv[])
     // Iterate whilst t less than the stopping time
     while (iter<iterMax)
       {
+
+	// Initialise time and events counting map
+	t=0e0;
 	
 	fieldMassDensFuture=0e0;
 
-	testParticle.setMass(m_in());
+	// Generate a test particle sampled from m_in
+	//testParticle.setMass(mIn());
+	testParticle.setMass(mtrand());
 
-	cout << "Test particle Mass=" << testParticle.getMass() << endl;
+	//cout << "Test particle Mass=" << testParticle.getMass() << endl;
 	
 	while(testParticleActive)
 	  {
@@ -325,14 +323,11 @@ int main(int argc, char *argv[])
 	    collRate=0.0;
 	    minProperty=1.0e8;
 	    
-	    for (int i=0; i<N; i++)
+	    for (unsigned long int i=0; i<N; i++)
 	      {
 		minProperty=min(minProperty, fieldParticleCurrent[i].getMass());
+		collRate+=k(testParticle.getMass(),fieldParticleCurrent[i].getMass())/fieldParticleCurrent[i].getMass();
 		
-		for (int j=0; j<N; j++)
-		  {
-		    collRate+=k(fieldParticleCurrent[i].getMass(),fieldParticleCurrent[j].getMass())/fieldParticleCurrent[j].getMass();
-		  }
 	      }
 	    
 	    collRate*=fieldMassDensCurrent/N;
@@ -344,7 +339,7 @@ int main(int argc, char *argv[])
 	    
 	    // Outflow rate
 	    rate[1]=0e0;
-	    for (int i=0; i<N; i++)
+	    for (unsigned long int i=0; i<N; i++)
 	      {
 		rate[1]+=1e0/theta(testParticle.getMass(),outFactor);
 	      }
@@ -361,16 +356,31 @@ int main(int argc, char *argv[])
 	    // Compute exponentially distributed waiting time
 	    tau=-log(mtrand())/(rateTotal);
 	    
+	    // Wait time tau
+	    t+=tau;
+	    
+	    // Recalculate future field particles mass density
 	    fieldMassDensFuture=fieldMassDensFuture+tau*Qin;
 	    
 	    repProb=eps2*Qin*tau/fieldMassDensCurrent;
 	    
-	    // with prob repProb replace a uniformly chosen field particle with a test particle
+	    cout << rate[0] << " " << rate[1] << " " << tau << " " << t << " " << repProb << endl;
+	    
+
+	    // With probability repProb replace a uniformly chosen field particle with a test particle
 	    if(mtrand()<repProb)
 	      {
-		firstParticle=mtrand.randInt( N ) ;
-		fieldParticleFuture[firstParticle].setMass(testParticle);
+		particleIndex=mtrand.randInt( N ) ;
+		fieldParticleFuture[particleIndex].setMass(testParticle.getMass());
+		//fieldParticleFuture[firstParticle]=testParticle;
 	      }
+
+	    // Particle collision
+	    // The test particle is active whilst it continues to collide
+	    // it become inactive once no more collision occur and it leaves the domain
+
+	    
+	    cout << "tp mass = " << testParticle.getMass() << " collProb = " << collProb << "rate[0]/rateTotal = " << rate[0] << endl;
 	    
 	    // Implement binary tree, but for now, do it like a spastic
 	    if(mtrand()<rate[0]/rateTotal)
@@ -378,133 +388,113 @@ int main(int argc, char *argv[])
 		// Coagulation occurs
 		// Choose a collision pair
 		
-		firstChosen=false;
-		secondChosen=false;
-	    
-		while(firstChosen==false)
-		  {
-		    while(secondChosen==false)
-		      {
-			firstParticle=mtrand.randInt( N ) ;
-			secondParticle=mtrand.randInt( N );
-			
-			//collProb=k(xDiam[firstParticle],xDiam[secondParticle])/(rateTotal*xDiam[secondParticle]);
-			collProb=k(mfaParticle[firstParticle].getMass(),mfaParticle[secondParticle].getMass())/(rateTotal*mfaParticle[secondParticle].getMass());
-			if( (mtrand()< collProb) && (firstParticle!=secondParticle))
-			  {
-			    firstChosen=true;
-			    secondChosen=true; 
-			  }
-		      }
-		    
-		    
-	      
-		  }
+		particleChosen=false;
 		
+		while(particleChosen==false)
+		  {
+		    
+		    particleIndex=mtrand.randInt( N ) ;
+		    
+		    collProb=k(testParticle.getMass(), fieldParticleCurrent[particleIndex].getMass())* \
+		      fieldMassDensCurrent/(N*rateTotal*fieldParticleCurrent[particleIndex].getMass());
+		    
+		    if(mtrand()<collProb)
+		      particleChosen=true;
+
+		    cout << "tp mass = " << testParticle.getMass() << " collProb = " << collProb << endl;
 
 
-	  mfaParticle[firstParticle]+=mfaParticle[secondParticle]; // use overloaded += operator
+		  }
 
-/*
-	  cout <<"New mass is  "<< mfaParticle[firstParticle].getMass() << endl;
+		//testParticle.setMass(testParticle.getMass()+fieldParticleCurrent[particleIndex].getMass());
+		testParticle+=fieldParticleCurrent[particleIndex]; // use overloaded += operator
 
-	  cout << "Press Enter to continue..." << endl;
-	  while (1)
-	  {
-	      if ('\n' == getchar())
-	         break;
-	  }
-*/
-	  events[0]++;
-	  testParticleActive=true;
-	  
+		testParticleActive=true; // collision occurred, so test particle still active
+		// Update events map // events['collision']++;
 	      }
-	    
 	    else
 	      {
 		testParticleActive=false;
 	      }
+
+	    //cout << "TP active:" << testParticleActive << " tp mass = " << testParticle.getMass() << " collProb = " << collProb << endl;
+   
 	  }
-
-	// Test particle leaves the system
 	
-	  events[1]++;
+	
+	
+	// Test particle leaves the system
 
-	  //cout << "Outflow occurs" << endl;
-	  
-      
-	  eventsTotal=events[0]+events[1]+events[2];
-	  
-	  cout.precision(8);
-	  outputFile.precision(8);
-	  momentsFile.precision(8);
-	  
-	  
-	  
-	  // Let's compute the moments of the distribution
-	  for(moment=0;moment<noMoments;moment++)
-	    {
-	      
-	      moments[moment]=0e0;
-	      
-	      for(int i=0;i<N;i++)
-		{
-		  moments[moment]+=pow(mfaParticle[i].getMass(),moment);
-		}
-	      moments[moment]=moments[moment]/N;
-	    }
-	  
-      
-	  //cout << tau << "\t" << t << "\t" << M << "\t" << lambda << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << "\t" <<  firstParticle << "\t" << secondParticle << "\t" << moments[1] << endl;
-	  
-	  cout << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3]<< endl;
-	  
-	  
-	  outputFile << tau << "\t" << t << "\t" << M << "\t" << lambda << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << endl;
-	  
-	  
-	  
-	  momentsFile << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3] << "\t" << moments[4] << endl;
-	  
-	  
-	  
-      
-      }
+	// Underrelax the field particles mass density
+	fieldMassDensCurrent=eps1*fieldMassDensFuture+(1e0-eps1)*fieldMassDensCurrent;
+		
+	//events[1]++;
+	
+	//cout << "Outflow occurs" << endl;
+	
+	// Update current field particles array
+	for (unsigned long int i=0; i<N; i++)
+	  {  
+	    fieldParticleCurrent[i]=fieldParticleFuture[i]; // overloaded = op
+	  }
+	
+    	//eventsTotal=events[0]+events[1]+events[2];
+	
+	cout.precision(8);
+	outputFile.precision(8);
+	momentsFile.precision(8);
+	
+	
+	
+	// Let's compute the moments of the distribution
+	for(moment=0;moment<noMoments;moment++)
+	  {
+	    
+	    moments[moment]=0e0;
+	    
+	    for(unsigned long int i=0;i<N;i++)
+	      {
+		moments[moment]+=pow(fieldParticleCurrent[i].getMass(),moment);
+	      }
+	    moments[moment]=moments[moment]/N;
+	  }
+	
+	
+	cout << iter << "\t" << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3]<< endl;
+	//outputFile << tau << "\t" << t << "\t" << M << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << endl;
+	momentsFile << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3] << "\t" << moments[4] << endl;
 
+	// Update iteration counter
+	iter++;
+	
+      } // End of iteration
+    
+    
     outputFile.close();
     momentsFile.close();
     
-    for(int i=0;i<N;i++)
+    for(unsigned long int i=0;i<N;i++)
       {
-	diamsFile << mfaParticle[i].getMass() << endl;
+	diamsFile << fieldParticleCurrent[i].getMass() << endl;
       }
     
     diamsFile.close();
     
-    //moments=computeMoments(xDiam,1);
-    
-
-
+   
     // Let's save the state of the random number generator
     if(saveRandState)
       {
 	saveState(mtrand);
-      }
-    
-    
-    
+      }  
     
     cout << "Events summary (collisions, inflows, outflows):" << endl << endl;
     cout << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << endl << endl;
     cout << "Simulation complete!" << endl;
-    cout << "Ran stochastic simulation with " << N << " stochastic particles for " << tStop << " seconds." << endl;
+    cout << "Ran stochastic simulation with " << N << " stochastic particles for " << iterMax << " iterations." << endl;
     cout << kernelName << " kernel selected." << endl;
     
     // Clean up memory
-    /* Leads to error.  Why?
-       delete [] mfaParticle;  // When done, free memory pointed to by .
-       mfaParticle = NULL;     // Clear pxDiam to prevent using invalid memory reference
-    */
+   
     delete [] rate;
     rate = NULL;
     delete [] events;

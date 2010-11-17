@@ -10,7 +10,9 @@ namespace spm
   extern double Qin; // Inflow rate = \int m_in(x) dx
   extern const double eps1; // Relaxation factor 1
   extern const double eps2; // Relaxation factor 2
-  
+  extern unsigned long int iterMax; // Number of iterations
+  extern bool coagOn; // Coagulation turned on?
+    
 } //namespace spm
 
 
