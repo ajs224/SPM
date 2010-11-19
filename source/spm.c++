@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <map>
+#include <vector>
 #include "random.h"
 #include "mfa_functions.h"
 #include "mfa_params.h"
@@ -34,20 +35,30 @@ int main(int argc, char *argv[])
   //double M; // mass density
   double collProb;
   //double* xDiam = NULL; // Pointer to double, initialize to nothing.
-  unsigned long int N=1024; // Number of particles
+  unsigned long int N=1024; // Number of field particles
 
   //double lambda,lambda0;
   //int alpha;
   double t, tau; // Current time and waiting time
 
   double* rate = new double[6]; //
-  int* events = new int[6]; //
-  //int eventsTotal;
+  //int* events = new int[6]; //
+  map<string,unsigned long int> event;
+
+  vector<string> eventTypes;
+    
+  eventTypes.push_back("coagulation");
+  eventTypes.push_back("inflow");
+  eventTypes.push_back("outflow");
+
+  //string kernelLabels[]={"constant", "additive"};
+
+  unsigned long int eventsTotal = 0;
     
   double collRate, rateTotal;
   double minProperty;
 
-  double inFactor=10e0,outFactor=inFactor;
+  double inFactor=2e0,outFactor=inFactor;
   
   bool particleChosen;
   unsigned long int particleIndex;
@@ -299,12 +310,17 @@ int main(int argc, char *argv[])
     
     // Output header
     cout << "t\t\tm0\t\t\tm1\t\t\tm2\t\t\tm3" << endl;
+
+    
+    // Populate event map event["<event type>"]=# events of this type
+    for(vector<string>::iterator it=eventTypes.begin();it!=eventTypes.end();++it)
+      event[*it] = 0;
     
     // Iterate whilst t less than the stopping time
     while (iter<iterMax)
       {
-
-	// Initialise time and events counting map
+	
+	// Initialise time
 	t=0e0;
 	
 	fieldMassDensFuture=0e0;
@@ -312,8 +328,10 @@ int main(int argc, char *argv[])
 	// Generate a test particle sampled from m_in
 	//testParticle.setMass(mIn());
 	testParticle.setMass(mtrand());
-
 	//cout << "Test particle Mass=" << testParticle.getMass() << endl;
+
+	// Update events map
+	event["inflow"]++;
 	
 	while(testParticleActive)
 	  {
@@ -338,12 +356,20 @@ int main(int argc, char *argv[])
 	    rate[0]=collRate;
 	    
 	    // Outflow rate
-	    rate[1]=0e0;
-	    for (unsigned long int i=0; i<N; i++)
-	      {
-		rate[1]+=1e0/theta(testParticle.getMass(),outFactor);
-	      }
 	    
+	    // To match f90 SPM (update this once fully working)
+	    rate[1]=0.1*testParticle.getMass();
+	    
+	    
+	    /*
+	      rate[1]=0e0;
+	      for (unsigned long int i=0; i<N; i++)
+	      {
+	      rate[1]+=1e0/theta(testParticle.getMass(),outFactor);
+	      }
+	      /*
+	      
+	      
 	    // Inflow rate
 	    //rate[2]=N/2e0; // m_in~U[0,1] // this should always be the rate!
 	    //rate[2]=N/inFactor; // m_in~U[0,1] // this should always be the rate!
@@ -360,11 +386,20 @@ int main(int argc, char *argv[])
 	    t+=tau;
 	    
 	    // Recalculate future field particles mass density
-	    fieldMassDensFuture=fieldMassDensFuture+tau*Qin;
+	    fieldMassDensFuture+=tau*Qin;
+
+	    /*
+	    cout << "fieldMassDensCurrent=" << fieldMassDensCurrent << " fieldMassDensFuture=" << fieldMassDensFuture << endl;
+	    cout << "tau=" << tau << " Qin=" << Qin << " rateTotal=" << rateTotal << endl;
+	    
+	    cin.sync();
+	    cin.get();
+	    */
 	    
 	    repProb=eps2*Qin*tau/fieldMassDensCurrent;
-	    
-	    cout << rate[0] << " " << rate[1] << " " << tau << " " << t << " " << repProb << endl;
+
+	    // Check the rates
+	    //cout << rate[0] << " " << rate[1] << " " << rateTotal << " " << tau << " " << t << " " << repProb << " " << Qin << " " << rate[0]/rateTotal << endl;
 	    
 
 	    // With probability repProb replace a uniformly chosen field particle with a test particle
@@ -379,12 +414,22 @@ int main(int argc, char *argv[])
 	    // The test particle is active whilst it continues to collide
 	    // it become inactive once no more collision occur and it leaves the domain
 
-	    
-	    cout << "tp mass = " << testParticle.getMass() << " collProb = " << collProb << "rate[0]/rateTotal = " << rate[0] << endl;
+	    /*
+	      double tst=mtrand();
+	      double pp=rate[0]/rateTotal;
+	      
+	      cout << "tst=" << tst << " pp=" << pp << endl << endl;
+	      cin.sync();
+	      cin.get();
+	    */
 	    
 	    // Implement binary tree, but for now, do it like a spastic
 	    if(mtrand()<rate[0]/rateTotal)
 	      {
+
+		//cout << "Coagulation occurs!" << endl << endl;
+		
+		
 		// Coagulation occurs
 		// Choose a collision pair
 		
@@ -393,58 +438,95 @@ int main(int argc, char *argv[])
 		while(particleChosen==false)
 		  {
 		    
-		    particleIndex=mtrand.randInt( N ) ;
+		    particleIndex=mtrand.randInt( N );
 		    
-		    collProb=k(testParticle.getMass(), fieldParticleCurrent[particleIndex].getMass())* \
-		      fieldMassDensCurrent/(N*rateTotal*fieldParticleCurrent[particleIndex].getMass());
+		    //collProb=k(testParticle.getMass(), fieldParticleCurrent[particleIndex].getMass())* \
+		    //  fieldMassDensCurrent/(N*rateTotal*fieldParticleCurrent[particleIndex].getMass());
+
+		    double kMaj=k(testParticle.getMass(), minProperty)/minProperty;
+
+		    collProb=(k(testParticle.getMass(), fieldParticleCurrent[particleIndex].getMass())/fieldParticleCurrent[particleIndex].getMass())/kMaj;
+		    double tmpRand=mtrand();
 		    
-		    if(mtrand()<collProb)
+		    
+		    if(tmpRand<collProb)
 		      particleChosen=true;
 
-		    cout << "tp mass = " << testParticle.getMass() << " collProb = " << collProb << endl;
-
-
+		    
+		    cout << "tp mass = " << testParticle.getMass() <<  " particleIndex = " << particleIndex << " tmpRand=" << tmpRand << endl;
+		    cout << "collProb = " << collProb << " rateTotal=" << rateTotal << " N=" << N << endl;
+		    cout << "k=" << k(testParticle.getMass(), fieldParticleCurrent[particleIndex].getMass()) << endl;
+		    cout << "fieldMassDensCurrent=" << fieldMassDensCurrent << " y_{p,i}=" << fieldParticleCurrent[particleIndex].getMass() << endl;
+		    cout << "minProperty=" << minProperty << endl;
+		    cout << "kMaj=" << kMaj << endl;
+		    cin.sync();
+		    cin.get();
 		  }
 
+		
+		//cout <<"#coags= "<< event["coagulation"] << " tp mass = " << testParticle.getMass() <<  " collProb = " << collProb << endl;
 		//testParticle.setMass(testParticle.getMass()+fieldParticleCurrent[particleIndex].getMass());
 		testParticle+=fieldParticleCurrent[particleIndex]; // use overloaded += operator
 
 		testParticleActive=true; // collision occurred, so test particle still active
-		// Update events map // events['collision']++;
+		
+		// Update events map
+		event["coagulation"]++;
 	      }
 	    else
 	      {
 		testParticleActive=false;
 	      }
 
+	    //cout << "tp mass = " << testParticle.getMass() << " collProb = " << collProb << "rate[0]/rateTotal = " << rate[0] << endl;
+	  
+	    
 	    //cout << "TP active:" << testParticleActive << " tp mass = " << testParticle.getMass() << " collProb = " << collProb << endl;
    
 	  }
 	
-	
+	//cout << "fieldMassDensCurrent=" << fieldMassDensCurrent << " fieldMassDensFuture=" << fieldMassDensFuture <<endl;
 	
 	// Test particle leaves the system
 
 	// Underrelax the field particles mass density
 	fieldMassDensCurrent=eps1*fieldMassDensFuture+(1e0-eps1)*fieldMassDensCurrent;
-		
-	//events[1]++;
+	
+	//cout << "fieldMassDensCurrent=" << fieldMassDensCurrent << " fieldMassDensFuture=" << fieldMassDensFuture <<endl;
+	//cin.sync();
+	//cin.get();
+	
+
+	
+	
+	// Update events map
+	event["outflow"]++;
+
+	/*
+	for(vector<string>::iterator it=eventTypes.begin();it!=eventTypes.end();++it)
+	  cout << *it << " ";
+	for(vector<string>::iterator it=eventTypes.begin();it!=eventTypes.end();++it)
+	  cout << "\t " << event[*it];
+	cout << endl;
+	*/
+
 	
 	//cout << "Outflow occurs" << endl;
 	
 	// Update current field particles array
-	for (unsigned long int i=0; i<N; i++)
+	for(unsigned long int i=0; i<N; i++)
 	  {  
 	    fieldParticleCurrent[i]=fieldParticleFuture[i]; // overloaded = op
 	  }
 	
-    	//eventsTotal=events[0]+events[1]+events[2];
+    	// Add up the total number of events of each type
+	for(map<string,unsigned long int>::const_iterator it=event.begin();it!=event.end();++it)
+	  eventsTotal+=it->second;
+
 	
 	cout.precision(8);
 	outputFile.precision(8);
 	momentsFile.precision(8);
-	
-	
 	
 	// Let's compute the moments of the distribution
 	for(moment=0;moment<noMoments;moment++)
@@ -460,7 +542,10 @@ int main(int argc, char *argv[])
 	  }
 	
 	
-	cout << iter << "\t" << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3]<< endl;
+	//cout << iter << "\t" << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3]<< endl;
+
+	cout << iter << "\t" << event["coagulation"] << "\t" << fieldMassDensCurrent << endl;
+		
 	//outputFile << tau << "\t" << t << "\t" << M << "\t" << alpha << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << "\t" << eventsTotal << endl;
 	momentsFile << t << "\t" << moments[0] << "\t" << moments[1] << "\t" << moments[2] << "\t" << moments[3] << "\t" << moments[4] << endl;
 
@@ -487,8 +572,15 @@ int main(int argc, char *argv[])
 	saveState(mtrand);
       }  
     
-    cout << "Events summary (collisions, inflows, outflows):" << endl << endl;
-    cout << "\t" << events[0] << "\t" << events[1] << "\t" << events[2] << endl << endl;
+    cout << "Events summary (";
+    for(vector<string>::iterator it=eventTypes.begin();it!=eventTypes.end();++it)
+      cout << *it << " ";
+    cout << "):" << endl << endl;
+    for(vector<string>::iterator it=eventTypes.begin();it!=eventTypes.end();++it)
+      cout << "\t " << event[*it];
+    cout << endl << endl;
+    
+    
     cout << "Simulation complete!" << endl;
     cout << "Ran stochastic simulation with " << N << " stochastic particles for " << iterMax << " iterations." << endl;
     cout << kernelName << " kernel selected." << endl;
@@ -497,8 +589,8 @@ int main(int argc, char *argv[])
    
     delete [] rate;
     rate = NULL;
-    delete [] events;
-    events = NULL;
+    //delete [] events;
+    // events = NULL;
     delete [] moments;
     moments = NULL; 
     

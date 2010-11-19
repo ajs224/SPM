@@ -4,7 +4,7 @@ namespace spm
 {
 
   double Qin=1e0;
-  const double eps1=1e0;
+  const double eps1=2.0e-2;
   const double eps2=0.5e0;
   unsigned long int iterMax=100;
   bool coagOn=true; 
