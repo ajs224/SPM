@@ -5,11 +5,11 @@
 // Coagulation kernel definition
 double k(double x, double y)
 {
-  
-  using namespace mfaAnalytic;
-  
-  
-  switch (kernelType)
+
+	using namespace mfaAnalytic;
+
+
+	switch (kernelType)
     {
     case continuum: // Brownian motion (continuum regine)
       return (pow(x,1e0/3e0)+pow(y,1e0/3e0))*(pow(x,-1e0/3e0)+pow(y,-1e0/3e0));
@@ -42,13 +42,13 @@ double k(double x, double y)
       return x+y;
       break;
     case multiplicative:
-      return x*y;
+      return 0.5*x*y;
       break;
     case spmtest:
       return pow(x*y,1e0/3e0);
       break;
     default: // constant kernel
-      return 1e0;
+      return (double) 1e0;
     }
 }
 

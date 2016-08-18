@@ -94,5 +94,5 @@ Particle Particle::operator+(const Particle & coagParticle)
 Particle Particle::operator+=(const Particle & coagParticle)
 {
   // Keeping the coagulate member function makes what this is doing more transparent
-	return *this=this->coagulate(coagParticle);
+  return *this=this->coagulate(coagParticle);
 }

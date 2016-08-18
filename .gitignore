@@ -1,0 +1,13 @@
+data/
+*.o
+*.log
+*~
+source/*~
+include/*~
+code.old/
+spm-c++
+*.txt
+Debug/
+Release
+*.gz
+additive/
